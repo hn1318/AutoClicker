@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AutoClicker</title>
+    <script>
+      // Resolve the theme before the stylesheet paints to avoid a flash.
+      // `ac.theme` is a mirror of the persisted setting, written by the app.
+      (function () {
+        var mode = null;
+        try {
+          mode = localStorage.getItem("ac.theme");
+        } catch (error) {
+          mode = null;
+        }
+        if (mode !== "light" && mode !== "dark") {
+          try {
+            mode = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+          } catch (error) {
+            mode = "light";
+          }
+        }
+        document.documentElement.dataset.theme = mode;
+      })();
+    </script>
+  </head>
+
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

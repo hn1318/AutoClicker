@@ -1,0 +1,132 @@
+/* ============================================================
+   AutoClicker — motion layer
+   Only transform / opacity are animated (plus color on theme swap).
+   Every duration lives in tokens.css.
+   ============================================================ */
+
+/* ---------- theme swap: colors only, 180ms ---------- */
+html.theme-changing,
+html.theme-changing *,
+html.theme-changing *::before,
+html.theme-changing *::after {
+  transition:
+    background-color var(--dur-theme) var(--ease-out),
+    border-color var(--dur-theme) var(--ease-out),
+    color var(--dur-theme) var(--ease-out),
+    fill var(--dur-theme) var(--ease-out),
+    stroke var(--dur-theme) var(--ease-out),
+    box-shadow var(--dur-theme) var(--ease-out) !important;
+}
+
+/* ---------- generic fade ---------- */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity var(--dur-2) var(--ease-out);
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
+/* ---------- floating panel: no cheap center zoom ---------- */
+.panel-enter-active {
+  transition:
+    opacity var(--dur-3) var(--ease-out),
+    transform var(--dur-3) var(--ease-out);
+}
+
+.panel-leave-active {
+  transition:
+    opacity var(--dur-1) var(--ease-out),
+    transform var(--dur-1) var(--ease-out);
+}
+
+.panel-enter-from,
+.panel-leave-to {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+/* ---------- toast ---------- */
+.toast-enter-active {
+  transition:
+    opacity var(--dur-2) var(--ease-out),
+    transform var(--dur-2) var(--ease-out);
+}
+
+.toast-leave-active {
+  transition:
+    opacity var(--dur-1) var(--ease-out),
+    transform var(--dur-1) var(--ease-out);
+}
+
+.toast-enter-from,
+.toast-leave-to {
+  opacity: 0;
+  transform: translateY(6px);
+}
+
+/* ---------- list add / remove / reorder (FLIP) ---------- */
+.list-enter-active,
+.list-leave-active {
+  transition:
+    opacity var(--dur-2) var(--ease-out),
+    transform var(--dur-2) var(--ease-out);
+}
+
+.list-leave-active {
+  position: absolute;
+  width: 100%;
+}
+
+.list-enter-from,
+.list-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
+.list-move {
+  transition: transform var(--dur-2) var(--ease-out);
+}
+
+/* ---------- running indicator: opacity breathing, never a glow ---------- */
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.dot-pulse {
+  animation: pulse-dot 1.6s var(--ease-out) infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.spin {
+  animation: spin 700ms linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .dot-pulse {
+    animation: none;
+    opacity: 1;
+  }
+}
