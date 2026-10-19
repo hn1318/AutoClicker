@@ -1,2 +1,8 @@
+# Single-package workspace. `packages` must not be empty: pnpm refuses to read
+# this file otherwise ("packages field missing or empty"), which is exactly what
+# broke `pnpm store path` on CI before.
+packages:
+  - "."
+
 minimumReleaseAgeExclude:
   - '@lucide/vue@1.59.0'
