@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "cursor-overlay",
+  "description": "Minimal permissions for the pointer readout overlay window",
+  "windows": ["cursor-overlay"],
+  "permissions": ["core:event:default"]
+}

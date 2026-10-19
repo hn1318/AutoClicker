@@ -1,0 +1,60 @@
+name: release
+
+# Push a tag such as `v0.1.0` to build the Windows installers and attach them to
+# a GitHub Release. The app itself reads the same release feed for updates, so
+# the tag body ends up as the "what's new" text shown to users.
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type-check frontend
+        run: pnpm exec vue-tsc --noEmit
+
+      - name: Build and publish
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "AutoClicker ${{ github.ref_name }}"
+          releaseBody: |
+            Windows 安装包见下方 Assets（`.msi` 安装版 / `-setup.exe` 便携安装版）。
+
+            Windows installers are attached below.
+          releaseDraft: false
+          prerelease: false
+          # Fail loudly instead of silently skipping the upload.
+          args: --bundles nsis,msi
