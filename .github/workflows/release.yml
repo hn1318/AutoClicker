@@ -22,6 +22,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # A tag that disagrees with the bundled version would make the in-app
+      # update check offer a "new" version that is actually the same build.
+      - name: Verify tag matches app version
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        run: |
+          $config = Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json
+          $tag = "${{ github.ref_name }}".TrimStart("v")
+          if ($config.version -ne $tag) {
+            Write-Error "Tag ${{ github.ref_name }} does not match tauri.conf.json version $($config.version). Bump the version (and package.json) before tagging."
+            exit 1
+          }
+
       # Resolves the pnpm version from `packageManager` in package.json so CI
       # matches local development exactly.
       - uses: pnpm/action-setup@v4
@@ -55,7 +68,8 @@ jobs:
             Windows 安装包见下方 Assets（`.msi` 安装版 / `-setup.exe` 便携安装版）。
 
             Windows installers are attached below.
-          releaseDraft: false
+          # Manual runs are drafts so they cannot ship a half-checked build.
+          releaseDraft: ${{ github.event_name == 'workflow_dispatch' }}
           prerelease: false
           # Fail loudly instead of silently skipping the upload.
           args: --bundles nsis,msi

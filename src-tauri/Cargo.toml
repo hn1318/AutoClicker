@@ -1,6 +1,6 @@
 [package]
 name = "autoclicker"
-version = "0.1.0"
+version = "0.2.0"
 description = "AutoClicker - a focused Windows auto clicker"
 authors = ["jlhan"]
 edition = "2024"
