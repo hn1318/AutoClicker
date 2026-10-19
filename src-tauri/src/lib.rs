@@ -1,5 +1,6 @@
 mod clicker;
 mod commands;
+mod cursor;
 mod error;
 mod hotkey;
 mod state;
@@ -32,6 +33,7 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
@@ -46,7 +48,9 @@ pub fn run() {
             commands::stop_clicking,
             commands::is_running,
             commands::get_cursor_position,
+            commands::set_cursor_tracking,
             commands::get_scale_at,
+            commands::open_url,
             commands::get_foreground_info,
             commands::get_app_info,
             commands::open_data_dir,
@@ -77,6 +81,12 @@ pub fn run() {
             if let Err(error) = hotkey::apply(handle, &settings.toggle_hotkey, &settings.abort_hotkey)
             {
                 eprintln!("[autoclicker] hotkey registration failed: {error}");
+            }
+
+            // The overlay must be built on the GUI thread; it stays hidden until
+            // the UI asks for tracking.
+            if let Err(error) = cursor::init(handle) {
+                eprintln!("[autoclicker] cursor overlay unavailable: {error}");
             }
 
             Ok(())

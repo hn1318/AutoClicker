@@ -13,6 +13,8 @@
     "core:window:allow-set-focus",
     "core:window:allow-unminimize",
     "store:default",
+    "clipboard-manager:allow-read-text",
+    "clipboard-manager:allow-write-text",
     "global-shortcut:default",
     "autostart:allow-enable",
     "autostart:allow-disable",

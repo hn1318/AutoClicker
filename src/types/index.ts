@@ -25,6 +25,7 @@ export type MouseButton = "left" | "middle" | "right" | "x1" | "x2";
 export type ClickType = "single" | "double" | "hold";
 export type PositionMode = "cursor" | "fixed";
 export type IntervalCurve = "constant" | "linear" | "random";
+export type CursorTrackMode = "always" | "running" | "off";
 
 export interface SequenceStep {
   id: string;
@@ -51,6 +52,7 @@ export interface Settings {
   positionMode: PositionMode;
   posX: number;
   posY: number;
+  cursorTrackMode: CursorTrackMode;
   countdownSec: number;
   jitterIntervalMs: number;
   jitterPositionPx: number;
@@ -111,6 +113,9 @@ export interface CursorInfo {
   logicalY: number;
   scale: number;
 }
+
+/** Streamed ~50 Hz by the Rust cursor sampler while tracking is active. */
+export type CursorPositionPayload = CursorInfo;
 
 export interface ForegroundInfo {
   title: string;

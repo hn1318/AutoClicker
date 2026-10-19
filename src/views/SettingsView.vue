@@ -15,6 +15,7 @@ import { useLocale } from "../composables/useI18n";
 import { useToast } from "../composables/useToast";
 import { useErrors } from "../composables/useErrors";
 import { compareVersions } from "../utils/format";
+import { GITHUB_RELEASES_PAGE, fetchLatestRelease, type UpdateCandidate } from "../utils/update";
 import type { AppInfo, SegmentedOption, Settings } from "../types";
 
 const { t } = useI18n();
@@ -65,33 +66,21 @@ async function changeHotkey(kind: "toggle" | "abort", value: string): Promise<vo
   }
 }
 
-function readManifestVersion(data: unknown): string | null {
-  if (typeof data !== "object" || data === null) return null;
-  const record = data as Record<string, unknown>;
-  const version = record.version;
-  if (typeof version !== "string" || version.trim() === "") return null;
-  return version.trim().replace(/^v/i, "");
-}
+const pendingRelease = ref<UpdateCandidate | null>(null);
 
+/**
+ * Reads the newest GitHub Release by default (the same feed the CI workflow
+ * publishes to); a custom manifest URL in settings takes precedence.
+ */
 async function checkUpdates(): Promise<void> {
-  const url = settings.value.updateUrl.trim();
-  if (url === "") {
-    toast.info(t("update.notConfigured"));
-    return;
-  }
-
   checking.value = true;
+  pendingRelease.value = null;
   try {
-    const response = await fetch(url, { cache: "no-store" });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const latest = readManifestVersion(await response.json());
-    if (!latest) {
-      toast.error(t("update.invalidManifest"));
-      return;
-    }
+    const candidate = await fetchLatestRelease(settings.value.updateUrl);
     const current = appInfo.value?.version ?? "0.0.0";
-    if (compareVersions(latest, current) > 0) {
-      toast.success(t("update.available", { version: latest }));
+    if (compareVersions(candidate.version, current) > 0) {
+      pendingRelease.value = candidate;
+      toast.success(t("update.available", { version: candidate.version }));
     } else {
       toast.success(t("update.upToDate"));
     }
@@ -100,6 +89,15 @@ async function checkUpdates(): Promise<void> {
     toast.error(t("update.failed"));
   } finally {
     checking.value = false;
+  }
+}
+
+async function openRelease(): Promise<void> {
+  const url = pendingRelease.value?.url || GITHUB_RELEASES_PAGE;
+  try {
+    await invoke("open_url", { url });
+  } catch (error) {
+    toast.error(errors.from(error));
   }
 }
 
@@ -276,6 +274,16 @@ const platform = computed(() => {
                   <template #icon><RefreshCw :size="12" :stroke-width="1.5" /></template>
                   {{ checking ? t("common.checking") : t("settings.checkUpdate") }}
                 </Button>
+              </div>
+            </div>
+            <div v-if="pendingRelease" class="row">
+              <div class="row__main">
+                <span class="row__label">
+                  {{ t("update.available", { version: pendingRelease.version }) }}
+                </span>
+              </div>
+              <div class="row__control">
+                <Button size="sm" @click="openRelease">{{ t("update.openRelease") }}</Button>
               </div>
             </div>
             <div class="row row--top">

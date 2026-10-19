@@ -22,6 +22,7 @@ export function createDefaultSettings(): Settings {
     positionMode: "cursor",
     posX: 0,
     posY: 0,
+    cursorTrackMode: "running",
     countdownSec: 0,
     jitterIntervalMs: 0,
     jitterPositionPx: 0,

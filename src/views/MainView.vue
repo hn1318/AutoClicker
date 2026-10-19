@@ -83,6 +83,12 @@ const buttonOptions = computed<SegmentedOption[]>(() => [
   { value: "x2", label: t("mouseButton.x2") },
 ]);
 
+const trackOptions = computed<SegmentedOption[]>(() => [
+  { value: "always", label: t("cursorTrack.always") },
+  { value: "running", label: t("cursorTrack.running") },
+  { value: "off", label: t("cursorTrack.off") },
+]);
+
 const curveOptions = computed<SegmentedOption[]>(() => [
   { value: "constant", label: t("curve.constant") },
   { value: "linear", label: t("curve.linear") },
@@ -98,6 +104,12 @@ function onClickType(value: string): void {
 function onButton(value: string): void {
   if (value === "left" || value === "middle" || value === "right" || value === "x1" || value === "x2") {
     settings.value.button = value;
+  }
+}
+
+function onTrackMode(value: string): void {
+  if (value === "always" || value === "running" || value === "off") {
+    settings.value.cursorTrackMode = value;
   }
 }
 
@@ -447,6 +459,20 @@ const captureLabel = computed(() =>
                 <Crosshair :size="13" :stroke-width="1.5" />
                 <span>{{ pickLabel }}</span>
               </button>
+            </div>
+          </div>
+          <div class="row">
+            <div class="row__main">
+              <span class="row__label">{{ t("cursorTrack.label") }}</span>
+              <span class="row__desc">{{ t("cursorTrack.hint") }}</span>
+            </div>
+            <div class="row__control">
+              <Segmented
+                :model-value="settings.cursorTrackMode"
+                :options="trackOptions"
+                :aria-label="t('cursorTrack.label')"
+                @update:model-value="onTrackMode"
+              />
             </div>
           </div>
         </Section>

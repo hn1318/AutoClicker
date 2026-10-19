@@ -37,6 +37,19 @@ pub enum PositionMode {
     Fixed,
 }
 
+/// When the on-screen cursor readout follows the pointer.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum CursorTrackMode {
+    /// Always visible while the app runs.
+    Always,
+    /// Only while the click engine is running.
+    #[default]
+    Running,
+    /// Never visible.
+    Off,
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum IntervalCurve {
@@ -88,6 +101,7 @@ pub struct Settings {
     pub position_mode: PositionMode,
     pub pos_x: i32,
     pub pos_y: i32,
+    pub cursor_track_mode: CursorTrackMode,
     pub countdown_sec: u32,
     pub jitter_interval_ms: u32,
     pub jitter_position_px: u32,
@@ -127,6 +141,7 @@ impl Default for Settings {
             position_mode: PositionMode::Cursor,
             pos_x: 0,
             pos_y: 0,
+            cursor_track_mode: CursorTrackMode::Running,
             countdown_sec: 0,
             jitter_interval_ms: 0,
             jitter_position_px: 0,
@@ -203,6 +218,12 @@ pub struct EngineHandle {
     pub thread: JoinHandle<()>,
 }
 
+/// Background cursor sampler feeding the on-screen readout overlay.
+pub struct CursorWatch {
+    pub cancel: Arc<AtomicBool>,
+    pub thread: JoinHandle<()>,
+}
+
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LogEntry {
@@ -263,6 +284,7 @@ pub struct AppState {
     pub settings: RwLock<Settings>,
     pub stats: Arc<RuntimeStats>,
     pub engine: Mutex<Option<EngineHandle>>,
+    pub cursor_watch: Mutex<Option<CursorWatch>>,
     pub logs: Mutex<Logs>,
     pub hotkeys: Mutex<HotkeyBindings>,
 }
@@ -277,6 +299,7 @@ impl AppState {
             settings: RwLock::new(settings),
             stats: Arc::new(RuntimeStats::default()),
             engine: Mutex::new(None),
+            cursor_watch: Mutex::new(None),
             logs: Mutex::new(Logs::default()),
             hotkeys: Mutex::new(hotkeys),
         }
