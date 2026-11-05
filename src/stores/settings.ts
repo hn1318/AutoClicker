@@ -43,6 +43,8 @@ export function createDefaultSettings(): Settings {
     windowProcess: "",
     toggleHotkey: "F6",
     abortHotkey: "F7",
+    pauseHotkey: "F8",
+    failsafeEnabled: false,
     theme: "system",
     language: "system",
     autostart: false,

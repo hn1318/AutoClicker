@@ -1,7 +1,7 @@
 export default {
   app: {
     name: "AutoClicker",
-    version: "v0.1.0",
+    version: "v0.32.0",
     tagline: "Windows 自动连点器",
   },
   titlebar: {
@@ -64,7 +64,24 @@ export default {
   groups: {
     click: "点击",
     position: "位置",
+    sequence: "多点位序列",
     advanced: "高级",
+  },
+  sequence: {
+    enabled: "启用序列",
+    enabledHint: "按录制顺序逐个点位点击，而不是单点循环",
+    loop: "循环播放",
+    loopHint: "关闭后整个序列只执行一次",
+    startRecording: "开始录制",
+    stopRecording: "停止录制",
+    clear: "清空",
+    count: "{count} 步",
+    recording: "录制中，点击目标位置即可记录",
+    recordingHint: "录制已开始，按停止录制结束",
+    recordEmpty: "没有录制到点击",
+    recordDone: "已录制 {count} 步",
+    empty: "还没有步骤，先录制一段点击序列",
+    remove: "删除该步骤",
   },
   mouseButton: {
     label: "鼠标按键",

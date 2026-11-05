@@ -43,6 +43,8 @@ pub struct RunEvent {
 enum StopReason {
     Completed,
     Cancelled,
+    /// The pointer reached the top-left fail-safe corner.
+    Failsafe,
 }
 
 impl StopReason {
@@ -50,6 +52,7 @@ impl StopReason {
         match self {
             Self::Completed => "completed",
             Self::Cancelled => "cancelled",
+            Self::Failsafe => "failsafe",
         }
     }
 }
@@ -106,14 +109,21 @@ pub fn spawn(
     config: SessionConfig,
     stats: Arc<RuntimeStats>,
     cancel: Arc<AtomicBool>,
+    pause: Arc<AtomicBool>,
 ) -> Result<JoinHandle<()>, AppError> {
     std::thread::Builder::new()
         .name("autoclicker-engine".into())
-        .spawn(move || run(app, config, stats, cancel))
+        .spawn(move || run(app, config, stats, cancel, pause))
         .map_err(|error| AppError::Internal(error.to_string()))
 }
 
-fn run(app: AppHandle, config: SessionConfig, stats: Arc<RuntimeStats>, cancel: Arc<AtomicBool>) {
+fn run(
+    app: AppHandle,
+    config: SessionConfig,
+    stats: Arc<RuntimeStats>,
+    cancel: Arc<AtomicBool>,
+    pause: Arc<AtomicBool>,
+) {
     // 1 ms system timer resolution: without this Sleep(1) can take 15 ms.
     unsafe {
         windows::Win32::Media::timeBeginPeriod(1);
@@ -125,7 +135,7 @@ fn run(app: AppHandle, config: SessionConfig, stats: Arc<RuntimeStats>, cancel: 
         .started_at_ms
         .store(crate::state::unix_ms(), Ordering::SeqCst);
 
-    let result = run_inner(&app, &config, &stats, &cancel);
+    let result = run_inner(&app, &config, &stats, &cancel, &pause);
 
     stats.running.store(false, Ordering::SeqCst);
     unsafe {
@@ -154,6 +164,7 @@ fn run_inner(
     config: &SessionConfig,
     stats: &Arc<RuntimeStats>,
     cancel: &Arc<AtomicBool>,
+    pause: &Arc<AtomicBool>,
 ) -> Result<LoopOutcome, AppError> {
     let total_delay = config.countdown_ms + config.schedule_delay_ms;
     if total_delay > 0 {
@@ -204,9 +215,9 @@ fn run_inner(
 
     let started = Instant::now();
     if let Some(plan) = &config.sequence {
-        run_sequence(app, config, plan, stats, cancel, started)
+        run_sequence(app, config, plan, stats, cancel, pause, started)
     } else {
-        run_single(app, config, stats, cancel, started)
+        run_single(app, config, stats, cancel, pause, started)
     }
 }
 
@@ -215,6 +226,7 @@ fn run_single(
     config: &SessionConfig,
     stats: &Arc<RuntimeStats>,
     cancel: &Arc<AtomicBool>,
+    pause: &Arc<AtomicBool>,
     started: Instant,
 ) -> Result<LoopOutcome, AppError> {
     let mut next = started;
@@ -230,6 +242,18 @@ fn run_single(
                 reason: StopReason::Cancelled,
                 clicks,
             });
+        }
+
+        // Pausing parks the loop but keeps the click count, so resuming does not
+        // restart the schedule or fire a catch-up burst.
+        if pause.load(Ordering::Relaxed) {
+            if !wait_while_paused(app, pause, cancel) {
+                return Ok(LoopOutcome {
+                    reason: StopReason::Cancelled,
+                    clicks,
+                });
+            }
+            next = Instant::now();
         }
 
         if let Some(filter) = &config.window_filter {
@@ -256,6 +280,17 @@ fn run_single(
                 reason: StopReason::Cancelled,
                 clicks,
             });
+        }
+
+        // Fail-safe: slamming the pointer into the top-left corner aborts.
+        if config.failsafe && config.keyboard_vk.is_none() {
+            let (x, y) = inject::cursor_position();
+            if inject::in_failsafe_corner(x, y) {
+                return Ok(LoopOutcome {
+                    reason: StopReason::Failsafe,
+                    clicks,
+                });
+            }
         }
 
         let target = config.target_point();
@@ -334,6 +369,7 @@ fn run_sequence(
     plan: &super::sequence::SequencePlan,
     stats: &Arc<RuntimeStats>,
     cancel: &Arc<AtomicBool>,
+    pause: &Arc<AtomicBool>,
     started: Instant,
 ) -> Result<LoopOutcome, AppError> {
     let mut clicks = 0u64;
@@ -343,6 +379,13 @@ fn run_sequence(
     loop {
         for step in &plan.steps {
             if cancel.load(Ordering::Relaxed) {
+                return Ok(LoopOutcome {
+                    reason: StopReason::Cancelled,
+                    clicks,
+                });
+            }
+
+            if pause.load(Ordering::Relaxed) && !wait_while_paused(app, pause, cancel) {
                 return Ok(LoopOutcome {
                     reason: StopReason::Cancelled,
                     clicks,
@@ -423,6 +466,20 @@ fn run_sequence(
             });
         }
     }
+}
+
+/// Park the loop until the user resumes. Returns false when a stop arrived,
+/// so the caller can unwind with `Cancelled`.
+fn wait_while_paused(app: &AppHandle, pause: &AtomicBool, cancel: &AtomicBool) -> bool {
+    emit_event(app, "paused", json!({}));
+    while pause.load(Ordering::Relaxed) {
+        if cancel.load(Ordering::Relaxed) {
+            return false;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    emit_event(app, "resumed", json!({}));
+    true
 }
 
 fn emit_tick_if_due(

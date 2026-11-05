@@ -32,20 +32,38 @@ fn register_all(app: &AppHandle, bindings: &HotkeyBindings) -> Result<(), AppErr
         })
         .map_err(|_| AppError::HotkeyConflict(bindings.abort.clone()))?;
 
+    manager
+        .on_shortcut(bindings.pause.as_str(), |app, _shortcut, event| {
+            if event.state == ShortcutState::Pressed {
+                commands::pause_from_hotkey(app);
+            }
+        })
+        .map_err(|_| AppError::HotkeyConflict(bindings.pause.clone()))?;
+
     Ok(())
 }
 
-/// Register `toggle` / `abort`. On failure the previous bindings are restored.
-pub fn apply(app: &AppHandle, toggle: &str, abort: &str) -> Result<HotkeyBindings, AppError> {
+/// Register `toggle` / `abort` / `pause`. On failure the previous bindings are
+/// restored.
+pub fn apply(
+    app: &AppHandle,
+    toggle: &str,
+    abort: &str,
+    pause: &str,
+) -> Result<HotkeyBindings, AppError> {
     let target = HotkeyBindings {
         toggle: toggle.trim().to_string(),
         abort: abort.trim().to_string(),
+        pause: pause.trim().to_string(),
     };
 
-    if target.toggle.is_empty() || target.abort.is_empty() {
+    if target.toggle.is_empty() || target.abort.is_empty() || target.pause.is_empty() {
         return Err(AppError::HotkeyInvalid(target.toggle.clone()));
     }
-    if target.toggle.eq_ignore_ascii_case(&target.abort) {
+    if target.toggle.eq_ignore_ascii_case(&target.abort)
+        || target.toggle.eq_ignore_ascii_case(&target.pause)
+        || target.abort.eq_ignore_ascii_case(&target.pause)
+    {
         return Err(AppError::HotkeyInvalid(target.toggle.clone()));
     }
 

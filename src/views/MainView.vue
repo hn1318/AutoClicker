@@ -9,6 +9,7 @@ import Segmented from "../components/Segmented.vue";
 import Toggle from "../components/Toggle.vue";
 import TextInput from "../components/TextInput.vue";
 import HotkeyInput from "../components/HotkeyInput.vue";
+import SequencePanel from "../components/SequencePanel.vue";
 import StatusBar from "../components/StatusBar.vue";
 import { useSettingsStore } from "../stores/settings";
 import { useRuntimeStore } from "../stores/runtime";
@@ -475,6 +476,10 @@ const captureLabel = computed(() =>
               />
             </div>
           </div>
+        </Section>
+
+        <Section :title="t('groups.sequence')">
+          <SequencePanel :locked="locked" />
         </Section>
 
         <Section :title="t('groups.advanced')">

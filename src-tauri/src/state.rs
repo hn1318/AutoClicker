@@ -1,5 +1,5 @@
 use std::collections::VecDeque;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::thread::JoinHandle;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -134,6 +134,8 @@ pub struct Settings {
     pub window_process: String,
     pub toggle_hotkey: String,
     pub abort_hotkey: String,
+    pub pause_hotkey: String,
+    pub failsafe_enabled: bool,
     pub theme: String,
     pub language: String,
     pub autostart: bool,
@@ -174,6 +176,8 @@ impl Default for Settings {
             window_process: String::new(),
             toggle_hotkey: "F6".into(),
             abort_hotkey: "F7".into(),
+            pause_hotkey: "F8".into(),
+            failsafe_enabled: false,
             theme: "system".into(),
             language: "system".into(),
             autostart: false,
@@ -201,6 +205,7 @@ impl Settings {
         self.schedule_stop_sec = self.schedule_stop_sec.min(86_400);
         self.toggle_hotkey = self.toggle_hotkey.trim().to_string();
         self.abort_hotkey = self.abort_hotkey.trim().to_string();
+        self.pause_hotkey = self.pause_hotkey.trim().to_string();
         self.update_url = self.update_url.trim().to_string();
         if self.sequence.len() > 100 {
             self.sequence.truncate(100);
@@ -235,6 +240,24 @@ pub struct EngineHandle {
 pub struct CursorWatch {
     pub cancel: Arc<AtomicBool>,
     pub thread: JoinHandle<()>,
+}
+
+/// One physical mouse click captured by the recorder.
+#[derive(Clone, Copy, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecordedClick {
+    pub x: i32,
+    pub y: i32,
+    pub button: MouseButton,
+    /// Milliseconds since the recording started.
+    pub ts_ms: u64,
+}
+
+/// Low-level mouse hook living on its own message-pump thread.
+pub struct RecorderHandle {
+    pub thread: JoinHandle<()>,
+    pub thread_id: Arc<AtomicU32>,
+    pub buffer: Arc<Mutex<Vec<RecordedClick>>>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -282,6 +305,7 @@ impl Logs {
 pub struct HotkeyBindings {
     pub toggle: String,
     pub abort: String,
+    pub pause: String,
 }
 
 impl Default for HotkeyBindings {
@@ -289,6 +313,7 @@ impl Default for HotkeyBindings {
         Self {
             toggle: "F6".into(),
             abort: "F7".into(),
+            pause: "F8".into(),
         }
     }
 }
@@ -298,6 +323,9 @@ pub struct AppState {
     pub stats: Arc<RuntimeStats>,
     pub engine: Mutex<Option<EngineHandle>>,
     pub cursor_watch: Mutex<Option<CursorWatch>>,
+    /// Shared with the engine thread; set while the user paused a run.
+    pub pause: Arc<AtomicBool>,
+    pub recorder: Mutex<Option<RecorderHandle>>,
     pub logs: Mutex<Logs>,
     pub hotkeys: Mutex<HotkeyBindings>,
 }
@@ -307,12 +335,15 @@ impl AppState {
         let hotkeys = HotkeyBindings {
             toggle: settings.toggle_hotkey.clone(),
             abort: settings.abort_hotkey.clone(),
+            pause: settings.pause_hotkey.clone(),
         };
         Self {
             settings: RwLock::new(settings),
             stats: Arc::new(RuntimeStats::default()),
             engine: Mutex::new(None),
             cursor_watch: Mutex::new(None),
+            pause: Arc::new(AtomicBool::new(false)),
+            recorder: Mutex::new(None),
             logs: Mutex::new(Logs::default()),
             hotkeys: Mutex::new(hotkeys),
         }

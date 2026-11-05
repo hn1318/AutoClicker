@@ -1,5 +1,6 @@
 pub mod engine;
 pub mod inject;
+pub mod recorder;
 pub mod sequence;
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -35,6 +36,8 @@ pub struct SessionConfig {
     pub sequence: Option<SequencePlan>,
     pub keyboard_vk: Option<u16>,
     pub window_filter: Option<WindowFilter>,
+    /// Abort the run when the pointer reaches the top-left corner.
+    pub failsafe: bool,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -126,6 +129,7 @@ impl SessionConfig {
             sequence,
             keyboard_vk,
             window_filter,
+            failsafe: settings.failsafe_enabled,
         })
     }
 

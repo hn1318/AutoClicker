@@ -73,6 +73,8 @@ export interface Settings {
   windowProcess: string;
   toggleHotkey: string;
   abortHotkey: string;
+  pauseHotkey: string;
+  failsafeEnabled: boolean;
   theme: ThemeMode;
   language: AppLanguage;
   autostart: boolean;
@@ -117,6 +119,21 @@ export interface CursorInfo {
 
 /** Streamed ~50 Hz by the Rust cursor sampler while tracking is active. */
 export type CursorPositionPayload = CursorInfo;
+
+export interface StatsSnapshot {
+  clicks: number;
+  elapsedMs: number;
+  cps: number;
+  running: boolean;
+  paused: boolean;
+}
+
+export interface LogEntryInfo {
+  id: number;
+  event: string;
+  params: Record<string, unknown>;
+  ts: number;
+}
 
 export interface ForegroundInfo {
   title: string;

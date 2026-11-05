@@ -1,7 +1,7 @@
 export default {
   app: {
     name: "AutoClicker",
-    version: "v0.1.0",
+    version: "v0.32.0",
     tagline: "Auto clicker for Windows",
   },
   titlebar: {
@@ -64,7 +64,24 @@ export default {
   groups: {
     click: "Click",
     position: "Position",
+    sequence: "Click sequence",
     advanced: "Advanced",
+  },
+  sequence: {
+    enabled: "Enable sequence",
+    enabledHint: "Click each recorded point in order instead of looping one spot",
+    loop: "Loop playback",
+    loopHint: "When off, the sequence runs once",
+    startRecording: "Record",
+    stopRecording: "Stop recording",
+    clear: "Clear",
+    count: "{count} steps",
+    recording: "Recording — click the target spots now",
+    recordingHint: "Recording started; press stop to finish",
+    recordEmpty: "No clicks were captured",
+    recordDone: "Recorded {count} steps",
+    empty: "No steps yet — record a click sequence first",
+    remove: "Remove step",
   },
   mouseButton: {
     label: "Mouse button",

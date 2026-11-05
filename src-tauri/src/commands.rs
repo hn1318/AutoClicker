@@ -12,7 +12,9 @@ use tauri_plugin_dialog::DialogExt;
 use crate::clicker::{SessionConfig, engine, inject};
 use crate::error::AppError;
 use crate::hotkey;
-use crate::state::{AppState, CloseAction, EngineHandle, LogEntry, Settings};
+use crate::state::{
+    AppState, ClickType, CloseAction, EngineHandle, LogEntry, RecordedClick, SequenceStep, Settings,
+};
 
 fn state_of(app: &AppHandle) -> State<'_, AppState> {
     app.state::<AppState>()
@@ -52,8 +54,13 @@ pub fn save_settings(app: AppHandle, mut settings: Settings) -> Result<Settings,
 }
 
 #[tauri::command]
-pub fn set_hotkeys(app: AppHandle, toggle: String, abort: String) -> Result<(), AppError> {
-    hotkey::apply(&app, &toggle, &abort)?;
+pub fn set_hotkeys(
+    app: AppHandle,
+    toggle: String,
+    abort: String,
+    pause: String,
+) -> Result<(), AppError> {
+    hotkey::apply(&app, &toggle, &abort, &pause)?;
     let state = state_of(&app);
     let mut settings = state
         .settings
@@ -61,6 +68,7 @@ pub fn set_hotkeys(app: AppHandle, toggle: String, abort: String) -> Result<(), 
         .map_err(|_| AppError::Internal("settings lock poisoned".into()))?;
     settings.toggle_hotkey = toggle.trim().to_string();
     settings.abort_hotkey = abort.trim().to_string();
+    settings.pause_hotkey = pause.trim().to_string();
     Ok(())
 }
 
@@ -101,8 +109,15 @@ pub fn start_impl(app: &AppHandle) -> Result<(), AppError> {
         .clone();
     let config = SessionConfig::from_settings(&settings)?;
 
+    state.pause.store(false, Ordering::SeqCst);
     let cancel = Arc::new(AtomicBool::new(false));
-    let thread = engine::spawn(app.clone(), config, state.stats.clone(), cancel.clone())?;
+    let thread = engine::spawn(
+        app.clone(),
+        config,
+        state.stats.clone(),
+        cancel.clone(),
+        state.pause.clone(),
+    )?;
     *guard = Some(EngineHandle { cancel, thread });
 
     state.log(
@@ -114,6 +129,7 @@ pub fn start_impl(app: &AppHandle) -> Result<(), AppError> {
 
 pub fn stop_impl(app: &AppHandle) -> Result<(), AppError> {
     let state = state_of(app);
+    state.pause.store(false, Ordering::SeqCst);
     let handle = {
         let mut guard = state
             .engine
@@ -160,6 +176,120 @@ pub fn abort_from_hotkey(app: &AppHandle) {
         if !matches!(error, AppError::NotRunning) {
             emit_error(app, &error);
         }
+    }
+}
+
+fn toggle_pause_impl(app: &AppHandle) -> Result<bool, AppError> {
+    let state = state_of(app);
+    if !is_engine_running(app) {
+        return Err(AppError::NotRunning);
+    }
+    let paused = !state.pause.load(Ordering::SeqCst);
+    state.pause.store(paused, Ordering::SeqCst);
+    state.log("pauseToggled", json!({ "paused": paused }));
+    Ok(paused)
+}
+
+#[tauri::command]
+pub fn toggle_pause(app: AppHandle) -> Result<bool, AppError> {
+    toggle_pause_impl(&app)
+}
+
+/// Hotkey entry point: no-op when nothing is running.
+pub fn pause_from_hotkey(app: &AppHandle) {
+    if let Err(error) = toggle_pause_impl(app) {
+        if !matches!(error, AppError::NotRunning) {
+            emit_error(app, &error);
+        }
+    }
+}
+
+/* ---------------- sequence recording ---------------- */
+
+#[tauri::command]
+pub fn is_recording(app: AppHandle) -> bool {
+    crate::clicker::recorder::is_recording(&app)
+}
+
+#[tauri::command]
+pub fn start_recording(app: AppHandle) -> Result<(), AppError> {
+    // A running engine injects clicks the recorder must not pick up.
+    if is_engine_running(&app) {
+        stop_impl(&app)?;
+    }
+    crate::clicker::recorder::start(&app)?;
+    state_of(&app).log("recordingStarted", json!({}));
+    Ok(())
+}
+
+#[tauri::command]
+pub fn stop_recording(app: AppHandle) -> Result<Vec<SequenceStep>, AppError> {
+    let clicks = crate::clicker::recorder::stop(&app)?;
+    let steps = clicks_to_steps(&clicks);
+    state_of(&app).log(
+        "recordingStopped",
+        json!({ "clicks": clicks.len(), "steps": steps.len() }),
+    );
+    Ok(steps)
+}
+
+/// Recorded clicks become a one-shot sequence, with the gap after each click as
+/// its delay.
+fn clicks_to_steps(clicks: &[RecordedClick]) -> Vec<SequenceStep> {
+    let mut steps = Vec::with_capacity(clicks.len());
+    for (index, click) in clicks.iter().enumerate() {
+        let delay = clicks
+            .get(index + 1)
+            .map(|next| next.ts_ms.saturating_sub(click.ts_ms))
+            .unwrap_or(200)
+            .clamp(10, 600_000);
+        steps.push(SequenceStep {
+            id: format!("rec-{}-{}", index, click.ts_ms),
+            x: click.x,
+            y: click.y,
+            button: click.button,
+            click_type: ClickType::Single,
+            hold_ms: 40,
+            delay_ms: delay,
+            enabled: true,
+        });
+    }
+    steps
+}
+
+/* ---------------- stats ---------------- */
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StatsSnapshot {
+    pub clicks: u64,
+    pub elapsed_ms: u64,
+    pub cps: f64,
+    pub running: bool,
+    pub paused: bool,
+}
+
+#[tauri::command]
+pub fn get_stats(app: AppHandle) -> StatsSnapshot {
+    let state = state_of(&app);
+    let clicks = state.stats.clicks.load(Ordering::Relaxed);
+    let started = state.stats.started_at_ms.load(Ordering::Relaxed);
+    let elapsed_ms = if started > 0 {
+        crate::state::unix_ms().saturating_sub(started)
+    } else {
+        0
+    };
+
+    StatsSnapshot {
+        clicks,
+        elapsed_ms,
+        cps: if elapsed_ms > 0 {
+            clicks as f64 * 1000.0 / elapsed_ms as f64
+        } else {
+            0.0
+        },
+        running: is_engine_running(&app),
+        paused: state.pause.load(Ordering::SeqCst),
     }
 }
 

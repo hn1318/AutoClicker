@@ -6,6 +6,7 @@ import type {
   CountdownPayload,
   RunPhase,
   RuntimeEventPayload,
+  StatsSnapshot,
   TickPayload,
 } from "../types";
 
@@ -15,6 +16,7 @@ import type {
  */
 export const useRuntimeStore = defineStore("runtime", () => {
   const phase = ref<RunPhase>("idle");
+  const paused = ref(false);
   const clicks = ref(0);
   const elapsedMs = ref(0);
   const cps = ref(0);
@@ -36,16 +38,25 @@ export const useRuntimeStore = defineStore("runtime", () => {
     switch (payload.event) {
       case "started":
         phase.value = "running";
+        paused.value = false;
         resetCounters();
         break;
       case "countdownStarted":
       case "scheduled":
         phase.value = "countdown";
+        paused.value = false;
         resetCounters();
+        break;
+      case "paused":
+        paused.value = true;
+        break;
+      case "resumed":
+        paused.value = false;
         break;
       case "stopped":
       case "error":
         phase.value = "idle";
+        paused.value = false;
         countdownRemainingMs.value = 0;
         break;
       default:
@@ -82,6 +93,8 @@ export const useRuntimeStore = defineStore("runtime", () => {
 
     if (await invoke<boolean>("is_running")) {
       phase.value = "running";
+      const stats = await invoke<StatsSnapshot>("get_stats");
+      paused.value = stats.paused;
     }
   }
 
@@ -99,8 +112,14 @@ export const useRuntimeStore = defineStore("runtime", () => {
     await invoke("stop_clicking");
   }
 
+  async function togglePause(): Promise<boolean> {
+    paused.value = await invoke<boolean>("toggle_pause");
+    return paused.value;
+  }
+
   return {
     phase,
+    paused,
     clicks,
     elapsedMs,
     cps,
@@ -111,5 +130,6 @@ export const useRuntimeStore = defineStore("runtime", () => {
     detach,
     start,
     stop,
+    togglePause,
   };
 });

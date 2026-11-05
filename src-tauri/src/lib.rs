@@ -40,7 +40,12 @@ pub fn run() {
             commands::set_hotkeys,
             commands::start_clicking,
             commands::stop_clicking,
+            commands::toggle_pause,
             commands::is_running,
+            commands::is_recording,
+            commands::start_recording,
+            commands::stop_recording,
+            commands::get_stats,
             commands::get_cursor_position,
             commands::set_cursor_tracking,
             commands::get_scale_at,
@@ -77,8 +82,12 @@ pub fn run() {
                 .unwrap_or_default();
 
             // A conflicting hotkey must not abort startup — the UI reports it.
-            if let Err(error) = hotkey::apply(handle, &settings.toggle_hotkey, &settings.abort_hotkey)
-            {
+            if let Err(error) = hotkey::apply(
+                handle,
+                &settings.toggle_hotkey,
+                &settings.abort_hotkey,
+                &settings.pause_hotkey,
+            ) {
                 eprintln!("[autoclicker] hotkey registration failed: {error}");
             }
 

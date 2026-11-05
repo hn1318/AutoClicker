@@ -136,6 +136,14 @@ pub fn point_in_own_window(x: i32, y: i32) -> bool {
     }
 }
 
+/// Size of the fail-safe hot corner at the top-left of the virtual screen.
+pub const FAILSAFE_SIZE: i32 = 8;
+
+/// True when the pointer sits in the top-left fail-safe corner.
+pub fn in_failsafe_corner(x: i32, y: i32) -> bool {
+    x <= FAILSAFE_SIZE && y <= FAILSAFE_SIZE
+}
+
 /// Sleep in small slices so a stop request is honoured within ~5 ms.
 /// Returns `true` when cancelled.
 pub fn sleep_cancellable(cancel: &AtomicBool, ms: u64) -> bool {
