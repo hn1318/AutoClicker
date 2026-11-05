@@ -4,34 +4,28 @@ mod cursor;
 mod error;
 mod hotkey;
 mod state;
+mod storage;
+mod tray;
 mod window_bind;
 
 use tauri::Manager;
-use tauri_plugin_store::StoreExt;
 
 use state::{AppState, Settings};
 
-const STORE_FILE: &str = "settings.json";
-const SETTINGS_KEY: &str = "settings";
-
-fn load_settings(app: &tauri::AppHandle) -> Option<Settings> {
-    let store = app.store(STORE_FILE).ok()?;
-    let value = store.get(SETTINGS_KEY)?;
-    serde_json::from_value::<Settings>(value).ok()
-}
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
-        // Must be registered first: it owns the second-launch handshake.
-        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.show();
-                let _ = window.unminimize();
-                let _ = window.set_focus();
-            }
-        }))
-        .plugin(tauri_plugin_store::Builder::new().build())
+    let builder = tauri::Builder::default();
+
+    // Only release builds take the single-instance lock. In dev it would fight
+    // with an installed copy sitting in the tray: the plugin makes the second
+    // process exit immediately, so `tauri dev` died with a bare `-1`.
+    #[cfg(not(debug_assertions))]
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+        // Relaunching from the Start menu must surface a hidden window.
+        tray::show_main(app);
+    }));
+
+    builder
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
@@ -54,6 +48,11 @@ pub fn run() {
             commands::get_foreground_info,
             commands::get_app_info,
             commands::open_data_dir,
+            commands::get_data_dir,
+            commands::pick_data_dir,
+            commands::set_data_dir,
+            commands::reset_data_dir,
+            commands::resolve_close,
             commands::export_settings,
             commands::import_settings,
             commands::get_logs,
@@ -64,7 +63,7 @@ pub fn run() {
             let state = app.state::<AppState>();
 
             // Restore persisted settings before the first paint reads them.
-            if let Some(mut settings) = load_settings(handle) {
+            if let Some(mut settings) = storage::load(handle) {
                 settings.normalize();
                 if let Ok(mut guard) = state.settings.write() {
                     *guard = settings;
@@ -87,6 +86,23 @@ pub fn run() {
             // the UI asks for tracking.
             if let Err(error) = cursor::init(handle) {
                 eprintln!("[autoclicker] cursor overlay unavailable: {error}");
+            }
+
+            // Tray + close policy. Without a tray the "keep running" branch would
+            // leave the app invisible and unreachable.
+            if let Err(error) = tray::init(handle, &settings.language) {
+                eprintln!("[autoclicker] tray icon unavailable: {error}");
+            }
+
+            if let Some(window) = app.get_webview_window("main") {
+                let handle = handle.clone();
+                window.on_window_event(move |event| {
+                    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                        // The policy decides; the window must not close on its own.
+                        api.prevent_close();
+                        tray::handle_close(&handle);
+                    }
+                });
             }
 
             Ok(())

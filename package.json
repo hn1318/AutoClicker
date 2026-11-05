@@ -1,9 +1,8 @@
 {
   "name": "autoclicker",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
-  "packageManager": "pnpm@12.6.0",
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc --noEmit && vite build",
@@ -20,7 +19,6 @@
     "@tauri-apps/plugin-global-shortcut": "2.4.1",
     "@tauri-apps/plugin-notification": "2.7.0",
     "@tauri-apps/plugin-shell": "2.5.0",
-    "@tauri-apps/plugin-store": "2.5.0",
     "pinia": "4.1.0",
     "vue": "3.5.44",
     "vue-i18n": "11.4.14"

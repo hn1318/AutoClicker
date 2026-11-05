@@ -26,6 +26,7 @@ export type ClickType = "single" | "double" | "hold";
 export type PositionMode = "cursor" | "fixed";
 export type IntervalCurve = "constant" | "linear" | "random";
 export type CursorTrackMode = "always" | "running" | "off";
+export type CloseAction = "ask" | "tray" | "quit";
 
 export interface SequenceStep {
   id: string;
@@ -75,7 +76,7 @@ export interface Settings {
   theme: ThemeMode;
   language: AppLanguage;
   autostart: boolean;
-  closeToTray: boolean;
+  closeAction: CloseAction;
   notifyFinish: boolean;
   updateUrl: string;
 }

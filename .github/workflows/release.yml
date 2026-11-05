@@ -35,9 +35,11 @@ jobs:
             exit 1
           }
 
-      # Resolves the pnpm version from `packageManager` in package.json so CI
-      # matches local development exactly.
+      # Pin the major so CI and local stay compatible without hard-pinning an
+      # exact patch (lockfiles are v9 either way).
       - uses: pnpm/action-setup@v4
+        with:
+          version: 12
 
       - uses: actions/setup-node@v4
         with:

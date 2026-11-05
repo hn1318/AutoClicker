@@ -41,6 +41,15 @@ const themeOptions = computed<SegmentedOption[]>(() => [
   { value: "dark", icon: Moon, ariaLabel: t("theme.dark") },
 ]);
 
+const closeOptions = computed<SegmentedOption[]>(() => [
+  { value: "ask", label: t("closeAction.ask") },
+  { value: "tray", label: t("closeAction.tray") },
+  { value: "quit", label: t("closeAction.quit") },
+]);
+
+const dataDir = ref("");
+const switchingDir = ref(false);
+
 onMounted(async () => {
   if (!isTauri()) return;
   try {
@@ -48,7 +57,50 @@ onMounted(async () => {
   } catch (error) {
     console.warn("[autoclicker] app info unavailable", error);
   }
+  await refreshDataDir();
 });
+
+function onCloseAction(value: string): void {
+  if (value === "ask" || value === "tray" || value === "quit") {
+    settings.value.closeAction = value;
+  }
+}
+
+async function refreshDataDir(): Promise<void> {
+  try {
+    dataDir.value = await invoke<string>("get_data_dir");
+  } catch (error) {
+    console.warn("[autoclicker] data dir unavailable", error);
+  }
+}
+
+async function changeDataDir(): Promise<void> {
+  switchingDir.value = true;
+  try {
+    const picked = await invoke<string | null>("pick_data_dir", {
+      title: t("storage.pickTitle"),
+    });
+    if (!picked) return;
+    dataDir.value = await invoke<string>("set_data_dir", { dir: picked });
+    toast.success(t("storage.changed", { path: dataDir.value }));
+  } catch (error) {
+    toast.error(errors.from(error));
+  } finally {
+    switchingDir.value = false;
+  }
+}
+
+async function resetDataDir(): Promise<void> {
+  switchingDir.value = true;
+  try {
+    dataDir.value = await invoke<string>("reset_data_dir");
+    toast.success(t("storage.resetDone", { path: dataDir.value }));
+  } catch (error) {
+    toast.error(errors.from(error));
+  } finally {
+    switchingDir.value = false;
+  }
+}
 
 function onTheme(value: string): void {
   if (value === "system" || value === "light" || value === "dark") {
@@ -200,6 +252,41 @@ const platform = computed(() => {
                 <Toggle v-model="settings.autostart" :aria-label="t('settings.autostart')" />
               </div>
             </div>
+            <div class="row">
+              <div class="row__main">
+                <span class="row__label">{{ t("closeAction.label") }}</span>
+                <span class="row__desc">{{ t("closeAction.hint") }}</span>
+              </div>
+              <div class="row__control">
+                <Segmented
+                  :model-value="settings.closeAction"
+                  :options="closeOptions"
+                  :aria-label="t('closeAction.label')"
+                  @update:model-value="onCloseAction"
+                />
+              </div>
+            </div>
+          </Section>
+
+          <Section :title="t('storage.title')" :description="t('storage.hint')">
+            <div class="row row--top">
+              <div class="row__main">
+                <span class="row__label">{{ t("storage.dataDir") }}</span>
+                <span class="row__desc num">{{ dataDir || t("storage.empty") }}</span>
+              </div>
+              <div class="row__control">
+                <Button size="sm" :loading="switchingDir" @click="changeDataDir">
+                  {{ t("storage.change") }}
+                </Button>
+                <Button size="sm" variant="ghost" :disabled="switchingDir" @click="resetDataDir">
+                  {{ t("storage.reset") }}
+                </Button>
+                <Button size="sm" variant="ghost" @click="openDataDir">
+                  <template #icon><FolderOpen :size="12" :stroke-width="1.5" /></template>
+                  {{ t("settings.openDataDir") }}
+                </Button>
+              </div>
+            </div>
           </Section>
 
           <Section :title="t('settings.hotkeys')" :description="t('settings.hotkeyHint')">
@@ -340,7 +427,7 @@ const platform = computed(() => {
             <div class="row">
               <div class="row__main">
                 <span class="row__label">{{ t("settings.dataDir") }}</span>
-                <span class="row__desc mono">{{ appInfo?.dataDir || "—" }}</span>
+                <span class="row__desc mono">{{ dataDir || appInfo?.dataDir || "—" }}</span>
               </div>
               <div class="row__control">
                 <Button size="sm" @click="openDataDir">

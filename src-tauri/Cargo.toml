@@ -1,6 +1,6 @@
 [package]
 name = "autoclicker"
-version = "0.2.0"
+version = "0.3.0"
 description = "AutoClicker - a focused Windows auto clicker"
 authors = ["jlhan"]
 edition = "2024"
@@ -21,7 +21,6 @@ tauri-build = { version = "2.7.3", features = [] }
 [dependencies]
 tauri = { version = "2.12.4", features = ["tray-icon", "image-png"] }
 tauri-plugin-global-shortcut = "2.4.1"
-tauri-plugin-store = "2.5.0"
 tauri-plugin-autostart = "2.7.0"
 tauri-plugin-single-instance = "2.5.4"
 tauri-plugin-clipboard-manager = "2.5.0"
@@ -37,6 +36,7 @@ fastrand = "2.5.0"
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.62.2", features = [
   "Win32_Foundation",
+  "Win32_Globalization",
   "Win32_Graphics_Gdi",
   "Win32_Media",
   "Win32_System_Threading",

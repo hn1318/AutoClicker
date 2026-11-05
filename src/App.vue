@@ -3,10 +3,12 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
 import TitleBar from "./components/TitleBar.vue";
 import Toast from "./components/Toast.vue";
 import ContextMenu from "./components/ContextMenu.vue";
+import CloseConfirm from "./components/CloseConfirm.vue";
 import MainView from "./views/MainView.vue";
 import SettingsView from "./views/SettingsView.vue";
 import { useRuntimeStore } from "./stores/runtime";
@@ -26,6 +28,21 @@ const errors = useErrors();
 
 const view = ref<"main" | "settings">("main");
 const contextMenu = useContextMenu();
+const closePrompt = ref(false);
+
+let unlistenClose: UnlistenFn | undefined;
+
+/** Rust intercepted a close request and asks the user what to do. */
+async function resolveClose(action: "tray" | "quit", remember: boolean): Promise<void> {
+  closePrompt.value = false;
+  try {
+    await invoke("resolve_close", { action, remember });
+    // Rust persisted the choice already; keep the UI in sync without re-saving.
+    if (remember) settingsStore.settings.closeAction = action;
+  } catch (error) {
+    toast.error(errors.from(error));
+  }
+}
 
 type EditableField = HTMLInputElement | HTMLTextAreaElement;
 
@@ -171,6 +188,11 @@ let updateTimer: number | undefined;
 onMounted(async () => {
   window.addEventListener("keydown", onKeydown);
   window.addEventListener("contextmenu", onContextMenu);
+  if (isTauri()) {
+    unlistenClose = await listen("app:close-requested", () => {
+      closePrompt.value = true;
+    });
+  }
   await runtime.attach();
   updateTimer = window.setTimeout(() => void autoCheckUpdate(), 8_000);
 });
@@ -178,6 +200,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   window.removeEventListener("keydown", onKeydown);
   window.removeEventListener("contextmenu", onContextMenu);
+  unlistenClose?.();
   if (updateTimer !== undefined) window.clearTimeout(updateTimer);
 });
 
@@ -229,5 +252,10 @@ function toggleSettings(): void {
 
     <Toast />
     <ContextMenu />
+    <CloseConfirm
+      :open="closePrompt"
+      @choose="resolveClose"
+      @cancel="closePrompt = false"
+    />
   </div>
 </template>

@@ -12,7 +12,7 @@ use tauri_plugin_dialog::DialogExt;
 use crate::clicker::{SessionConfig, engine, inject};
 use crate::error::AppError;
 use crate::hotkey;
-use crate::state::{AppState, EngineHandle, LogEntry, Settings};
+use crate::state::{AppState, CloseAction, EngineHandle, LogEntry, Settings};
 
 fn state_of(app: &AppHandle) -> State<'_, AppState> {
     app.state::<AppState>()
@@ -30,12 +30,24 @@ pub fn get_settings(app: AppHandle) -> Settings {
 #[tauri::command]
 pub fn save_settings(app: AppHandle, mut settings: Settings) -> Result<Settings, AppError> {
     settings.normalize();
-    let state = state_of(&app);
-    let mut guard = state
-        .settings
-        .write()
-        .map_err(|_| AppError::Internal("settings lock poisoned".into()))?;
-    *guard = settings.clone();
+
+    let previous_language = {
+        let state = state_of(&app);
+        let mut guard = state
+            .settings
+            .write()
+            .map_err(|_| AppError::Internal("settings lock poisoned".into()))?;
+        let previous = guard.language.clone();
+        *guard = settings.clone();
+        previous
+    };
+
+    // The profile must reach the disk here: there is no frontend store anymore.
+    crate::storage::save(&app, &settings)?;
+
+    if previous_language != settings.language {
+        sync_tray_language(&app, &settings.language);
+    }
     Ok(settings)
 }
 
@@ -254,26 +266,116 @@ pub fn get_app_info(app: AppHandle) -> AppInfo {
         tauri_version: tauri::VERSION.to_string(),
         os: std::env::consts::OS.to_string(),
         arch: std::env::consts::ARCH.to_string(),
-        data_dir: app
-            .path()
-            .app_data_dir()
-            .map(|path| path.to_string_lossy().to_string())
-            .unwrap_or_default(),
+        data_dir: crate::storage::current_dir(&app)
+            .to_string_lossy()
+            .to_string(),
     }
 }
 
 #[tauri::command]
 pub fn open_data_dir(app: AppHandle) -> Result<(), AppError> {
-    let dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|error| AppError::Internal(error.to_string()))?;
+    let dir = crate::storage::current_dir(&app);
     std::fs::create_dir_all(&dir).map_err(|error| AppError::Internal(error.to_string()))?;
     std::process::Command::new("explorer")
         .arg(&dir)
         .spawn()
         .map_err(|error| AppError::Internal(error.to_string()))?;
     Ok(())
+}
+
+#[tauri::command]
+pub fn get_data_dir(app: AppHandle) -> String {
+    crate::storage::current_dir(&app)
+        .to_string_lossy()
+        .to_string()
+}
+
+/// Native folder picker for the "change data directory" flow.
+#[tauri::command]
+pub async fn pick_data_dir(app: AppHandle, title: String) -> Result<Option<String>, AppError> {
+    let handle = app.clone();
+    let picked = tauri::async_runtime::spawn_blocking(move || {
+        handle
+            .dialog()
+            .file()
+            .set_title(title)
+            .blocking_pick_folder()
+    })
+    .await
+    .map_err(|error| AppError::Internal(error.to_string()))?;
+
+    Ok(picked
+        .and_then(|folder| folder.into_path().ok())
+        .map(|path| path.to_string_lossy().to_string()))
+}
+
+/// Switch to `dir`, carrying the current profile over. Returns the new path.
+#[tauri::command]
+pub fn set_data_dir(app: AppHandle, dir: String) -> Result<String, AppError> {
+    let target = crate::storage::set_dir(&app, &dir)?;
+
+    // Persist the in-memory profile into the new location right away.
+    let settings = state_of(&app)
+        .settings
+        .read()
+        .map_err(|_| AppError::Internal("settings lock poisoned".into()))?
+        .clone();
+    crate::storage::save(&app, &settings)?;
+
+    let path = target.to_string_lossy().to_string();
+    state_of(&app).log("dataDirChanged", json!({ "path": path }));
+    Ok(path)
+}
+
+/// Go back to the platform default directory.
+#[tauri::command]
+pub fn reset_data_dir(app: AppHandle) -> Result<String, AppError> {
+    let target = crate::storage::reset_dir(&app)?;
+    let settings = state_of(&app)
+        .settings
+        .read()
+        .map_err(|_| AppError::Internal("settings lock poisoned".into()))?
+        .clone();
+    crate::storage::save(&app, &settings)?;
+
+    let path = target.to_string_lossy().to_string();
+    state_of(&app).log("dataDirReset", json!({ "path": path }));
+    Ok(path)
+}
+
+/// Answer to the "close to tray or quit?" dialog.
+#[tauri::command]
+pub fn resolve_close(app: AppHandle, action: String, remember: bool) -> Result<(), AppError> {
+    let next = match action.as_str() {
+        "tray" => CloseAction::Tray,
+        "quit" => CloseAction::Quit,
+        _ => CloseAction::Ask,
+    };
+
+    if remember && next != CloseAction::Ask {
+        let settings = {
+            let state = state_of(&app);
+            let mut guard = state
+                .settings
+                .write()
+                .map_err(|_| AppError::Internal("settings lock poisoned".into()))?;
+            guard.close_action = next;
+            guard.clone()
+        };
+        crate::storage::save(&app, &settings)?;
+    }
+
+    match next {
+        CloseAction::Tray => crate::tray::keep_in_tray(&app),
+        CloseAction::Quit => app.exit(0),
+        CloseAction::Ask => {}
+    }
+    Ok(())
+}
+
+/// The tray menu follows the UI language, so a language change rebuilds it.
+fn sync_tray_language(app: &AppHandle, language: &str) {
+    crate::tray::refresh_menu(app, language);
 }
 
 /// Suggested file name in the save dialog.
@@ -352,13 +454,20 @@ pub async fn import_settings(
     settings.normalize();
 
     let state = state_of(&app);
-    {
+    let previous_language = {
         let mut guard = state
             .settings
             .write()
             .map_err(|_| AppError::Internal("settings lock poisoned".into()))?;
+        let previous = guard.language.clone();
         *guard = settings.clone();
+        previous
+    };
+    crate::storage::save(&app, &settings)?;
+    if previous_language != settings.language {
+        sync_tray_language(&app, &settings.language);
     }
+
     state.log(
         "settingsImported",
         json!({ "path": path.to_string_lossy() }),

@@ -50,6 +50,19 @@ pub enum CursorTrackMode {
     Off,
 }
 
+/// What the title-bar close button does.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum CloseAction {
+    /// Ask with an in-app dialog every time.
+    #[default]
+    Ask,
+    /// Keep running in the tray.
+    Tray,
+    /// Exit the app.
+    Quit,
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum IntervalCurve {
@@ -124,7 +137,7 @@ pub struct Settings {
     pub theme: String,
     pub language: String,
     pub autostart: bool,
-    pub close_to_tray: bool,
+    pub close_action: CloseAction,
     pub notify_finish: bool,
     pub update_url: String,
 }
@@ -164,7 +177,7 @@ impl Default for Settings {
             theme: "system".into(),
             language: "system".into(),
             autostart: false,
-            close_to_tray: true,
+            close_action: CloseAction::Ask,
             notify_finish: false,
             update_url: String::new(),
         }

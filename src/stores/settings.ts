@@ -1,14 +1,15 @@
 import { defineStore } from "pinia";
 import { ref, watch } from "vue";
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import { load, type Store } from "@tauri-apps/plugin-store";
 import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
 import type { AppLanguage, Settings, ThemeMode } from "../types";
 import { applyLocale } from "../locales";
 import { applyThemeMode } from "../composables/useTheme";
 
-const STORE_FILE = "settings.json";
-const SETTINGS_KEY = "settings";
+/**
+ * Persistence lives in Rust (`storage.rs`): the profile can be relocated, so the
+ * frontend never touches the file itself.
+ */
 const SAVE_DEBOUNCE_MS = 300;
 
 export function createDefaultSettings(): Settings {
@@ -45,7 +46,7 @@ export function createDefaultSettings(): Settings {
     theme: "system",
     language: "system",
     autostart: false,
-    closeToTray: true,
+    closeAction: "ask",
     notifyFinish: false,
     updateUrl: "",
   };
@@ -55,18 +56,15 @@ export const useSettingsStore = defineStore("settings", () => {
   const settings = ref<Settings>(createDefaultSettings());
   const ready = ref(false);
 
-  let fileStore: Store | null = null;
   let saveTimer: number | undefined;
   let hydrating = true;
 
   async function loadFromDisk(): Promise<void> {
     if (isTauri()) {
       try {
-        fileStore = await load(STORE_FILE, { autoSave: false });
-        const saved = await fileStore.get<Settings>(SETTINGS_KEY);
-        if (saved) {
-          settings.value = { ...createDefaultSettings(), ...saved };
-        }
+        // Rust already read the profile at startup; this is just a snapshot.
+        const saved = await invoke<Settings>("get_settings");
+        settings.value = { ...createDefaultSettings(), ...saved };
       } catch (error) {
         console.warn("[autoclicker] failed to read stored settings", error);
       }
@@ -105,10 +103,7 @@ export const useSettingsStore = defineStore("settings", () => {
   async function persist(): Promise<void> {
     if (!isTauri()) return;
     try {
-      if (fileStore) {
-        await fileStore.set(SETTINGS_KEY, settings.value);
-        await fileStore.save();
-      }
+      // Rust normalizes, stores in memory and flushes to the active data dir.
       await invoke("save_settings", { settings: settings.value });
     } catch (error) {
       console.error("[autoclicker] failed to persist settings", error);
