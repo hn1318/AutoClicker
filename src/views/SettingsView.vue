@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { Download, FolderOpen, Monitor, Moon, RefreshCw, Sun, Upload } from "@lucide/vue";
@@ -11,16 +11,16 @@ import TextInput from "../components/TextInput.vue";
 import HotkeyInput from "../components/HotkeyInput.vue";
 import { useSettingsStore } from "../stores/settings";
 import { useRuntimeStore } from "../stores/runtime";
+import { useUpdateStore } from "../stores/update";
 import { useLocale } from "../composables/useI18n";
 import { useToast } from "../composables/useToast";
 import { useErrors } from "../composables/useErrors";
-import { compareVersions } from "../utils/format";
-import { GITHUB_RELEASES_PAGE, fetchLatestRelease, type UpdateCandidate } from "../utils/update";
 import type { AppInfo, SegmentedOption, Settings } from "../types";
 
 const { t } = useI18n();
 const settingsStore = useSettingsStore();
 const runtime = useRuntimeStore();
+const updater = useUpdateStore();
 const toast = useToast();
 const errors = useErrors();
 const { language, languageOptions, setLanguage } = useLocale();
@@ -28,7 +28,6 @@ const { language, languageOptions, setLanguage } = useLocale();
 const settings = computed(() => settingsStore.settings);
 const tab = ref<"general" | "about">("general");
 const appInfo = ref<AppInfo | null>(null);
-const checking = ref(false);
 
 const tabs = computed<SegmentedOption[]>(() => [
   { value: "general", label: t("nav.general") },
@@ -118,40 +117,49 @@ async function changeHotkey(kind: "toggle" | "abort", value: string): Promise<vo
   }
 }
 
-const pendingRelease = ref<UpdateCandidate | null>(null);
-
-/**
- * Reads the newest GitHub Release by default (the same feed the CI workflow
- * publishes to); a custom manifest URL in settings takes precedence.
- */
+/** The signed manifest is read from GitHub Releases unless a custom source is set. */
 async function checkUpdates(): Promise<void> {
-  checking.value = true;
-  pendingRelease.value = null;
   try {
-    const candidate = await fetchLatestRelease(settings.value.updateUrl);
-    const current = appInfo.value?.version ?? "0.0.0";
-    if (compareVersions(candidate.version, current) > 0) {
-      pendingRelease.value = candidate;
-      toast.success(t("update.available", { version: candidate.version }));
+    const found = await updater.check();
+    if (found) {
+      toast.success(t("update.available", { version: found.version }));
     } else {
       toast.success(t("update.upToDate"));
     }
   } catch (error) {
-    console.error("[autoclicker] update check failed", error);
-    toast.error(t("update.failed"));
-  } finally {
-    checking.value = false;
+    toast.error(errors.from(error));
   }
 }
 
-async function openRelease(): Promise<void> {
-  const url = pendingRelease.value?.url || GITHUB_RELEASES_PAGE;
+async function downloadUpdate(): Promise<void> {
   try {
-    await invoke("open_url", { url });
+    const ready = await updater.download();
+    toast.success(t("update.ready", { version: ready.version }));
   } catch (error) {
     toast.error(errors.from(error));
   }
 }
+
+async function restartToUpdate(): Promise<void> {
+  try {
+    await updater.install();
+  } catch (error) {
+    toast.error(errors.from(error));
+  }
+}
+
+const updateLabel = computed(() => {
+  const version = updater.info?.version ?? "";
+  return updater.ready ? t("update.ready", { version }) : t("update.available", { version });
+});
+
+// Turning auto-update on should not wait for the next launch.
+watch(
+  () => settings.value.autoUpdate,
+  (enabled) => {
+    if (enabled && updater.status === "available") void downloadUpdate();
+  },
+);
 
 async function openDataDir(): Promise<void> {
   try {
@@ -357,20 +365,54 @@ const platform = computed(() => {
                 </span>
               </div>
               <div class="row__control">
-                <Button size="sm" :loading="checking" @click="checkUpdates">
+                <Button
+                  size="sm"
+                  :loading="updater.status === 'checking'"
+                  :disabled="updater.busy || updater.ready"
+                  @click="checkUpdates"
+                >
                   <template #icon><RefreshCw :size="12" :stroke-width="1.5" /></template>
-                  {{ checking ? t("common.checking") : t("settings.checkUpdate") }}
+                  {{ updater.status === "checking" ? t("common.checking") : t("settings.checkUpdate") }}
                 </Button>
               </div>
             </div>
-            <div v-if="pendingRelease" class="row">
+            <div class="row">
               <div class="row__main">
-                <span class="row__label">
-                  {{ t("update.available", { version: pendingRelease.version }) }}
+                <span class="row__label">{{ t("settings.autoUpdate") }}</span>
+                <span class="row__desc">{{ t("settings.autoUpdateHint") }}</span>
+              </div>
+              <div class="row__control">
+                <Toggle v-model="settings.autoUpdate" :aria-label="t('settings.autoUpdate')" />
+              </div>
+            </div>
+            <div v-if="updater.info" class="row">
+              <div class="row__main">
+                <span class="row__label">{{ updateLabel }}</span>
+                <span v-if="updater.status === 'downloading'" class="row__desc num">
+                  {{ t("update.progress", { percent: updater.percent }) }}
+                </span>
+                <span v-else-if="updater.ready" class="row__desc">
+                  {{ t("update.restartHint") }}
                 </span>
               </div>
               <div class="row__control">
-                <Button size="sm" @click="openRelease">{{ t("update.openRelease") }}</Button>
+                <Button
+                  v-if="updater.ready"
+                  size="sm"
+                  :loading="updater.status === 'installing'"
+                  @click="restartToUpdate"
+                >
+                  {{ t("update.restart") }}
+                </Button>
+                <Button
+                  v-else
+                  size="sm"
+                  :loading="updater.status === 'downloading'"
+                  :disabled="updater.busy"
+                  @click="downloadUpdate"
+                >
+                  {{ t("update.download") }}
+                </Button>
               </div>
             </div>
             <div class="row row--top">

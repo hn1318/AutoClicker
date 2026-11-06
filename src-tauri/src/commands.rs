@@ -362,20 +362,6 @@ pub fn set_cursor_tracking(app: AppHandle, active: bool) -> Result<(), AppError>
     }
 }
 
-/// Open an `http(s)` URL in the default browser (update downloads).
-#[tauri::command]
-pub fn open_url(url: String) -> Result<(), AppError> {
-    let target = url.trim();
-    if !(target.starts_with("https://") || target.starts_with("http://")) {
-        return Err(AppError::InvalidInput("updateUrl"));
-    }
-    std::process::Command::new("explorer")
-        .arg(target)
-        .spawn()
-        .map_err(|error| AppError::Internal(error.to_string()))?;
-    Ok(())
-}
-
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppInfo {

@@ -6,6 +6,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use tauri_plugin_updater::Update;
 
 pub const LOG_CAPACITY: usize = 200;
 
@@ -142,6 +143,7 @@ pub struct Settings {
     pub close_action: CloseAction,
     pub notify_finish: bool,
     pub update_url: String,
+    pub auto_update: bool,
 }
 
 impl Default for Settings {
@@ -184,6 +186,7 @@ impl Default for Settings {
             close_action: CloseAction::Ask,
             notify_finish: false,
             update_url: String::new(),
+            auto_update: false,
         }
     }
 }
@@ -251,6 +254,14 @@ pub struct RecordedClick {
     pub button: MouseButton,
     /// Milliseconds since the recording started.
     pub ts_ms: u64,
+}
+
+/// A verified installer held in memory until the user agrees to restart.
+/// Installing closes the process, so it must never happen on its own.
+pub struct PendingUpdate {
+    pub version: String,
+    pub update: Update,
+    pub bytes: Vec<u8>,
 }
 
 /// Low-level mouse hook living on its own message-pump thread.
@@ -328,6 +339,7 @@ pub struct AppState {
     pub recorder: Mutex<Option<RecorderHandle>>,
     pub logs: Mutex<Logs>,
     pub hotkeys: Mutex<HotkeyBindings>,
+    pub pending_update: Mutex<Option<PendingUpdate>>,
 }
 
 impl AppState {
@@ -346,6 +358,7 @@ impl AppState {
             recorder: Mutex::new(None),
             logs: Mutex::new(Logs::default()),
             hotkeys: Mutex::new(hotkeys),
+            pending_update: Mutex::new(None),
         }
     }
 

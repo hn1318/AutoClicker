@@ -13,6 +13,9 @@ target
 dist-ssr
 *.local
 
+# Update signing keys never belong in the repo
+src-tauri/keys
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

@@ -6,6 +6,7 @@ mod hotkey;
 mod state;
 mod storage;
 mod tray;
+mod updater;
 mod window_bind;
 
 use tauri::Manager;
@@ -26,6 +27,7 @@ pub fn run() {
     }));
 
     builder
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
@@ -49,7 +51,6 @@ pub fn run() {
             commands::get_cursor_position,
             commands::set_cursor_tracking,
             commands::get_scale_at,
-            commands::open_url,
             commands::get_foreground_info,
             commands::get_app_info,
             commands::open_data_dir,
@@ -62,6 +63,9 @@ pub fn run() {
             commands::import_settings,
             commands::get_logs,
             commands::clear_logs,
+            updater::check_update,
+            updater::download_update,
+            updater::install_update,
         ])
         .setup(|app| {
             let handle = app.handle();

@@ -9,12 +9,12 @@ import TitleBar from "./components/TitleBar.vue";
 import Toast from "./components/Toast.vue";
 import ContextMenu from "./components/ContextMenu.vue";
 import CloseConfirm from "./components/CloseConfirm.vue";
+import Button from "./components/Button.vue";
 import MainView from "./views/MainView.vue";
 import SettingsView from "./views/SettingsView.vue";
 import { useRuntimeStore } from "./stores/runtime";
 import { useSettingsStore } from "./stores/settings";
-import { compareVersions } from "./utils/format";
-import { fetchLatestRelease } from "./utils/update";
+import { useUpdateStore } from "./stores/update";
 import { useToast } from "./composables/useToast";
 import { useErrors } from "./composables/useErrors";
 import { useContextMenu } from "./composables/useContextMenu";
@@ -23,6 +23,7 @@ import type { RuntimeEventPayload } from "./types";
 const { t } = useI18n();
 const runtime = useRuntimeStore();
 const settingsStore = useSettingsStore();
+const updater = useUpdateStore();
 const toast = useToast();
 const errors = useErrors();
 
@@ -165,21 +166,32 @@ function onKeydown(event: KeyboardEvent): void {
 
 /**
  * Background update check: one quiet probe per launch, delayed so it never
- * competes with startup. Failures stay silent — the Settings page has the
- * explicit button with error reporting.
+ * competes with startup. With auto-update on, the installer is fetched and
+ * verified right away — but never run, because installing closes the app and a
+ * clicking run may be in progress. Failures stay silent: the Settings page has
+ * the explicit button with error reporting.
  */
 async function autoCheckUpdate(): Promise<void> {
   if (!isTauri()) return;
   try {
-    const [candidate, info] = await Promise.all([
-      fetchLatestRelease(settingsStore.settings.updateUrl),
-      invoke<{ version: string }>("get_app_info"),
-    ]);
-    if (compareVersions(candidate.version, info.version) > 0) {
-      toast.info(t("update.available", { version: candidate.version }));
+    const found = await updater.check();
+    if (!found) return;
+    if (settingsStore.settings.autoUpdate) {
+      const ready = await updater.download();
+      toast.success(t("update.ready", { version: ready.version }));
+      return;
     }
+    toast.info(t("update.available", { version: found.version }));
   } catch (error) {
     console.warn("[autoclicker] background update check skipped", error);
+  }
+}
+
+async function restartToUpdate(): Promise<void> {
+  try {
+    await updater.install();
+  } catch (error) {
+    toast.error(errors.from(error));
   }
 }
 
@@ -247,6 +259,18 @@ function toggleSettings(): void {
       @close="close"
     />
 
+    <div v-if="updater.status === 'ready'" class="update-bar">
+      <span class="update-bar__text">
+        {{ t("update.ready", { version: updater.info?.version }) }}
+      </span>
+      <span v-if="runtime.phase !== 'idle'" class="update-bar__hint">
+        {{ t("update.restartBlocked") }}
+      </span>
+      <Button size="sm" :disabled="runtime.phase !== 'idle'" @click="restartToUpdate">
+        {{ t("update.restart") }}
+      </Button>
+    </div>
+
     <MainView v-if="view === 'main'" />
     <SettingsView v-else />
 
@@ -259,3 +283,28 @@ function toggleSettings(): void {
     />
   </div>
 </template>
+
+<style scoped>
+.update-bar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-6);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.update-bar__text {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: var(--fs-11);
+}
+
+.update-bar__hint {
+  flex: none;
+  color: var(--text-faint);
+  font-size: var(--fs-11);
+}
+</style>

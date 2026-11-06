@@ -81,6 +81,7 @@ export interface Settings {
   closeAction: CloseAction;
   notifyFinish: boolean;
   updateUrl: string;
+  autoUpdate: boolean;
 }
 
 /* ---------------- runtime events ---------------- */
@@ -138,6 +139,19 @@ export interface LogEntryInfo {
 export interface ForegroundInfo {
   title: string;
   process: string;
+}
+
+/** A newer release found by the built-in updater (signature verified). */
+export interface UpdateInfo {
+  version: string;
+  currentVersion: string;
+  notes: string;
+  date: string | null;
+}
+
+export interface UpdateProgress {
+  downloaded: number;
+  total: number | null;
 }
 
 export interface AppInfo {

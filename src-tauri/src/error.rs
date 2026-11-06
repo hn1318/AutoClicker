@@ -21,6 +21,12 @@ pub enum AppError {
     InputBlocked,
     #[error("settings file is not valid JSON settings")]
     SettingsFileInvalid,
+    #[error("update failed: {0}")]
+    UpdateFailed(String),
+    #[error("no update available")]
+    UpdateNotFound,
+    #[error("no downloaded update to install")]
+    UpdateNotReady,
     #[error("platform error: {0}")]
     Platform(String),
     #[error("internal error: {0}")]
@@ -37,6 +43,9 @@ impl AppError {
             Self::HotkeyInvalid(_) => "hotkeyInvalid",
             Self::InputBlocked => "inputBlocked",
             Self::SettingsFileInvalid => "settingsFileInvalid",
+            Self::UpdateFailed(_) => "updateFailed",
+            Self::UpdateNotFound => "updateNotFound",
+            Self::UpdateNotReady => "updateNotReady",
             Self::Platform(_) => "platform",
             Self::Internal(_) => "internal",
         }
@@ -46,7 +55,9 @@ impl AppError {
         match self {
             Self::InvalidInput(field) => json!({ "field": field }),
             Self::HotkeyConflict(accel) | Self::HotkeyInvalid(accel) => json!({ "accel": accel }),
-            Self::Platform(detail) | Self::Internal(detail) => json!({ "detail": detail }),
+            Self::UpdateFailed(detail) | Self::Platform(detail) | Self::Internal(detail) => {
+                json!({ "detail": detail })
+            }
             _ => Value::Null,
         }
     }

@@ -49,19 +49,29 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
-更新检查默认指向 `src/utils/update.ts` 中的 `GITHUB_REPO`（当前为 `hn1318/AutoClicker`），换仓库时只改这一处即可。它是默认更新源，也是"前往下载"按钮的兜底链接。
+推送标签前需要在仓库 **Settings → Secrets and variables → Actions** 配置更新签名（缺了它 CI 会直接失败，而不是发出无法校验的更新包）：
 
-安装包未做代码签名，首次运行会出现 SmartScreen 提示。若要做静默自动更新（下载 + 安装而不是跳转浏览器），需要接入 `tauri-plugin-updater` 并配置签名密钥与 `latest.json`，目前用的是轻量的"检查 + 提示 + 打开发布页"方案。
+- `TAURI_SIGNING_PRIVATE_KEY`：`pnpm tauri signer generate -w src-tauri/keys/autoclicker.key` 生成的私钥文件内容（`src-tauri/keys/` 已加入 `.gitignore`）
+- `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`：生成密钥时设置的密码，未设密码可留空
+
+应用内更新由 `tauri-plugin-updater` 完成：
+
+- 更新源与公钥在 `src-tauri/tauri.conf.json` 的 `plugins.updater` 中配置，默认读取本仓库 Release 的 `latest.json`；设置页「更新源」可覆盖为自定义清单地址
+- `bundle.createUpdaterArtifacts` 让 CI 产出带 minisign 签名的安装包与 `latest.json`
+- 启动后台检查 → 发现新版本后下载并校验签名 → 用户点「重启并安装」才运行安装器，由 NSIS 拉起新版本
+- 设置页「自动更新」默认关闭；开启后启动时自动下载，但仍然需要点击重启才安装（安装会关闭应用，不能打断正在进行的连点）
+
+安装包未做代码签名，首次运行会出现 SmartScreen 提示。
 
 ## 目录结构
 
 ```
 src/                    前端（Vue 3 + Pinia + vue-i18n）
   views/                MainView（连点设置）/ SettingsView（设置、备份、更新、关于）
-  stores/               settings（持久化与 Rust 同步）/ runtime（引擎状态镜像）
+  stores/               settings（持久化与 Rust 同步）/ runtime（引擎状态镜像）/ update（下载与安装状态）
   components/           设计系统控件 + CursorOverlay（浮层页）+ ContextMenu + CloseConfirm
   composables/          useContextMenu / useToast / useErrors / useTheme / useI18n
-  utils/                format（版本比较等）/ update（GitHub Release 检查）
+  utils/                format（版本比较、时长格式化）
   locales/              zh-CN / en-US
 src-tauri/src/
   lib.rs                插件注册、命令注册、启动时恢复设置与创建跟踪浮层

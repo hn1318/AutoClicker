@@ -51,6 +51,7 @@ export function createDefaultSettings(): Settings {
     closeAction: "ask",
     notifyFinish: false,
     updateUrl: "",
+    autoUpdate: false,
   };
 }
 
