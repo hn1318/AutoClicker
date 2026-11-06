@@ -1,8 +1,13 @@
 name: release
 
-# Push a tag such as `v0.1.0` to build the Windows installers and attach them to
+# Push a tag such as `v1.0.2` to build the Windows installers and attach them to
 # a GitHub Release. The app itself reads the same release feed for updates, so
 # the tag body ends up as the "what's new" text shown to users.
+#
+# Build time is dominated by compiling ~400 crates in the release profile
+# (LTO + codegen-units=1). Two things keep that off the critical path:
+#   1. `ci.yml` warms the rust-cache on `master`; tag runs restore it.
+#   2. The NSIS/WiX toolchains Tauri downloads are cached below.
 on:
   push:
     tags:
@@ -48,15 +53,27 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
+      # Restores the default-branch cache warmed by ci.yml. `cache-on-failure`
+      # keeps partial artifacts when a run dies mid-build.
       - uses: swatinem/rust-cache@v2
         with:
           workspaces: src-tauri -> target
+          cache-on-failure: true
+
+      # Tauri downloads NSIS and WiX on first bundle; they rarely change.
+      - name: Cache Tauri bundler toolchain
+        uses: actions/cache@v4
+        with:
+          path: ~/AppData/Local/tauri
+          key: tauri-tools-${{ runner.os }}-${{ hashFiles('package.json') }}
+          restore-keys: |
+            tauri-tools-${{ runner.os }}-
 
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Type-check frontend
-        run: pnpm exec vue-tsc --noEmit
+      # No separate type-check step: `pnpm build` (beforeBuildCommand) already
+      # runs `vue-tsc --noEmit && vite build`, and it fails before cargo starts.
 
       - name: Build and publish
         uses: tauri-apps/tauri-action@v0

@@ -2,7 +2,7 @@
 
 轻量、克制的 Windows 自动连点器。点击由 Rust 层的 Win32 `SendInput` 直接注入，界面（Vue 3）只负责设置——计时完全不经过 JavaScript，1 ms 间隔也不会漂移。
 
-> 当前版本：v1.0.0 · 平台：Windows 10 / 11 · 许可证：MIT
+> 当前版本：v1.0.2 · 平台：Windows 10 / 11 · 许可证：MIT
 
 ---
 
@@ -256,4 +256,4 @@ pnpm tauri build    # 构建，产物在 src-tauri/target/release/bundle/
 
 ---
 
-*本文档基于项目源码（`src/`、`src-tauri/src/`）与 README 整理，对应版本 v1.0.0。*
+*本文档基于项目源码（`src/`、`src-tauri/src/`）与 README 整理，对应版本 v1.0.2。*

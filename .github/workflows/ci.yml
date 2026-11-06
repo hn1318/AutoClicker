@@ -1,0 +1,71 @@
+name: ci
+
+# Warms the rust-cache used by `release.yml`.
+#
+# GitHub scopes caches to the ref that created them: a cache written by
+# `refs/tags/v1.0.1` is invisible to `refs/tags/v1.0.2`, so every tagged release
+# used to compile the whole dependency tree from scratch. Building the release
+# profile on the default branch once per lockfile change gives every tag run a
+# warm `src-tauri/target` to restore from.
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - "src-tauri/**"
+      - "src/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/ci.yml"
+  pull_request:
+    paths:
+      - "src-tauri/**"
+      - "src/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      # Same `workspaces` mapping as release.yml so both jobs hit one cache.
+      # Only the default branch writes it; PRs restore without polluting.
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          save-if: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main' }}
+          cache-on-failure: true
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      # `generate_context!` embeds `frontendDist`, so the bundle must exist
+      # before cargo compiles the binary.
+      - name: Build frontend
+        run: pnpm build
+
+      # Release profile on purpose: only these artifacts are reusable by the
+      # release job. A debug build would populate a different target subdir.
+      - name: Warm release artifacts
+        run: cargo build --release --manifest-path src-tauri/Cargo.toml

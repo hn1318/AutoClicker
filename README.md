@@ -45,8 +45,8 @@ pnpm tauri build
 
 ```bash
 # 版本号同步改 src-tauri/tauri.conf.json 的 version 后
-git tag v0.1.0
-git push origin v0.1.0
+git tag v1.0.2
+git push origin v1.0.2
 ```
 
 推送标签前需要在仓库 **Settings → Secrets and variables → Actions** 配置更新签名（缺了它 CI 会直接失败，而不是发出无法校验的更新包）：

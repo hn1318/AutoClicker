@@ -15,7 +15,7 @@ import { useSettingsStore } from "../stores/settings";
 import { useRuntimeStore } from "../stores/runtime";
 import { useToast } from "../composables/useToast";
 import { useErrors } from "../composables/useErrors";
-import type { CursorInfo, ForegroundInfo, SegmentedOption } from "../types";
+import type { AppInfo, CursorInfo, ForegroundInfo, SegmentedOption } from "../types";
 
 const { t } = useI18n();
 const settingsStore = useSettingsStore();
@@ -26,6 +26,21 @@ const errors = useErrors();
 const settings = computed(() => settingsStore.settings);
 const locked = computed(() => runtime.phase !== "idle");
 const fixedMode = computed(() => settings.value.positionMode === "fixed");
+
+/* ---------------- version (single source: tauri.conf.json) ---------------- */
+const appVersion = ref("");
+
+onMounted(() => void refreshVersion());
+
+async function refreshVersion(): Promise<void> {
+  if (!isTauri()) return;
+  try {
+    const info = await invoke<AppInfo>("get_app_info");
+    appVersion.value = `v${info.version}`;
+  } catch {
+    // Fall back to the bundled string rather than showing nothing.
+  }
+}
 
 /* ---------------- theme ---------------- */
 const themeOptions = computed<SegmentedOption[]>(() => [
@@ -288,7 +303,7 @@ const captureLabel = computed(() =>
           <div class="hero__top">
             <div class="inline">
               <h1 class="hero__title">{{ t("app.name") }}</h1>
-              <span class="tag num">{{ t("app.version") }}</span>
+              <span class="tag num">{{ appVersion || t("app.version") }}</span>
             </div>
             <Segmented
               size="sm"
