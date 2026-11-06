@@ -254,6 +254,7 @@ export default {
     notRunning: "Nothing is running",
     hotkeyConflict: "Hotkey {accel} is already taken by another app",
     hotkeyInvalid: "Hotkey {accel} is not valid — a modifier is required",
+    hotkeyDuplicate: "Hotkey {accel} is already used by another action",
     inputBlocked: "Target window runs elevated (admin) — clicks cannot be injected",
     settingsFileInvalid: "That file is not a valid AutoClicker settings export",
     updateFailed: "Update failed: {detail}",

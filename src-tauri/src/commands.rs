@@ -58,10 +58,23 @@ pub fn set_hotkeys(
     app: AppHandle,
     toggle: String,
     abort: String,
-    pause: String,
+    pause: Option<String>,
 ) -> Result<(), AppError> {
-    hotkey::apply(&app, &toggle, &abort, &pause)?;
     let state = state_of(&app);
+
+    // `pause` is optional at the IPC boundary: a caller that only edits the
+    // toggle/abort bindings keeps the stored pause binding instead of failing
+    // argument deserialization (which surfaces as a generic "unknown error").
+    let pause = match pause {
+        Some(value) if !value.trim().is_empty() => value,
+        _ => state
+            .settings
+            .read()
+            .map(|settings| settings.pause_hotkey.clone())
+            .unwrap_or_else(|_| "F8".to_string()),
+    };
+
+    hotkey::apply(&app, &toggle, &abort, &pause)?;
     let mut settings = state
         .settings
         .write()

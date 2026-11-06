@@ -64,7 +64,16 @@ pub fn apply(
         || target.toggle.eq_ignore_ascii_case(&target.pause)
         || target.abort.eq_ignore_ascii_case(&target.pause)
     {
-        return Err(AppError::HotkeyInvalid(target.toggle.clone()));
+        // Report the binding that the user most likely just picked, so the
+        // message names the real collision instead of an unrelated key.
+        let duplicated = if target.toggle.eq_ignore_ascii_case(&target.pause)
+            || target.abort.eq_ignore_ascii_case(&target.pause)
+        {
+            target.pause.clone()
+        } else {
+            target.toggle.clone()
+        };
+        return Err(AppError::HotkeyDuplicate(duplicated));
     }
 
     let state = app.state::<AppState>();

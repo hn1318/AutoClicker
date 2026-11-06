@@ -17,6 +17,8 @@ pub enum AppError {
     HotkeyConflict(String),
     #[error("invalid hotkey: {0}")]
     HotkeyInvalid(String),
+    #[error("hotkey already bound: {0}")]
+    HotkeyDuplicate(String),
     #[error("input blocked")]
     InputBlocked,
     #[error("settings file is not valid JSON settings")]
@@ -41,6 +43,7 @@ impl AppError {
             Self::NotRunning => "notRunning",
             Self::HotkeyConflict(_) => "hotkeyConflict",
             Self::HotkeyInvalid(_) => "hotkeyInvalid",
+            Self::HotkeyDuplicate(_) => "hotkeyDuplicate",
             Self::InputBlocked => "inputBlocked",
             Self::SettingsFileInvalid => "settingsFileInvalid",
             Self::UpdateFailed(_) => "updateFailed",
@@ -54,7 +57,9 @@ impl AppError {
     pub fn params(&self) -> Value {
         match self {
             Self::InvalidInput(field) => json!({ "field": field }),
-            Self::HotkeyConflict(accel) | Self::HotkeyInvalid(accel) => json!({ "accel": accel }),
+            Self::HotkeyConflict(accel) | Self::HotkeyInvalid(accel) | Self::HotkeyDuplicate(accel) => {
+                json!({ "accel": accel })
+            }
             Self::UpdateFailed(detail) | Self::Platform(detail) | Self::Internal(detail) => {
                 json!({ "detail": detail })
             }

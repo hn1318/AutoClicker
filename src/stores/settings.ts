@@ -130,18 +130,24 @@ export const useSettingsStore = defineStore("settings", () => {
       await invoke("set_hotkeys", {
         toggle: settings.value.toggleHotkey,
         abort: settings.value.abortHotkey,
+        pause: settings.value.pauseHotkey,
       });
     } catch (error) {
       console.warn("[autoclicker] failed to re-register hotkeys", error);
     }
   }
 
-  async function setHotkeys(toggle: string, abort: string): Promise<void> {
+  async function setHotkeys(toggle: string, abort: string, pause?: string): Promise<void> {
+    // `pause` is part of the Rust command signature; omitting it makes Tauri
+    // reject the call before it reaches our error type (the UI would only see a
+    // generic "unknown error"). Always send the current value.
+    const nextPause = pause ?? settings.value.pauseHotkey;
     // Rust validates + registers; a conflict is thrown before we mutate state,
     // so the UI simply keeps the old binding.
-    await invoke("set_hotkeys", { toggle, abort });
+    await invoke("set_hotkeys", { toggle, abort, pause: nextPause });
     settings.value.toggleHotkey = toggle;
     settings.value.abortHotkey = abort;
+    settings.value.pauseHotkey = nextPause;
   }
 
   function setTheme(theme: ThemeMode): void {

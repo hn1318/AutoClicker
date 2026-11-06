@@ -254,6 +254,7 @@ export default {
     notRunning: "当前没有正在运行的任务",
     hotkeyConflict: "热键 {accel} 已被其他程序占用",
     hotkeyInvalid: "热键 {accel} 无效，至少需要一个修饰键",
+    hotkeyDuplicate: "热键 {accel} 已被其他操作占用，请换一个",
     inputBlocked: "目标窗口权限更高（管理员），无法注入点击",
     settingsFileInvalid: "配置文件格式不正确，请选择 AutoClicker 导出的 JSON 文件",
     updateFailed: "更新失败：{detail}",
